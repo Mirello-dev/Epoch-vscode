@@ -3,7 +3,7 @@
   "displayName": "epoch-time",
   "description": "The swiss army knive for coding time tracking.",
   "publisher": "Mirello",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "keywords": [
     "epoch",
     "vscode",
@@ -63,6 +63,10 @@
         "title": "epoch: Set Instance"
       },
       {
+        "command": "epoch.validateApiKey",
+        "title": "epoch: Validate API Key"
+      },
+      {
         "command": "epoch.openDashboard",
         "title": "epoch: Open Dashboard"
       },
@@ -80,7 +84,7 @@
         },
         "epoch.baseUrl": {
           "type": "string",
-          "default": "https://epoch.app",
+          "default": "https://epoch.mirello.cloud",
           "description": "Base URL for the epoch server instance"
         }
       }
