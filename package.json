@@ -1,9 +1,9 @@
 {
-  "name": "epoch",
-  "displayName": "epoch",
+  "name": "epoch-time",
+  "displayName": "epoch-time",
   "description": "The swiss army knive for coding time tracking.",
   "publisher": "Mirello",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "keywords": [
     "epoch",
     "vscode",
