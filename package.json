@@ -1,0 +1,103 @@
+{
+  "name": "epoch",
+  "displayName": "epoch",
+  "description": "The swiss army knive for coding time tracking.",
+  "publisher": "Mirello",
+  "version": "0.1.0",
+  "keywords": [
+    "epoch",
+    "vscode",
+    "extension",
+    "api",
+    "visualization",
+    "education",
+    "analytics",
+    "code",
+    "code time",
+    "codetime",
+    "flow",
+    "focus",
+    "metrics",
+    "productivity",
+    "time",
+    "timer",
+    "time tracker",
+    "time tracking",
+    "tracker",
+    "tracking",
+    "worktime"
+  ],
+  "homepage": "https://mirello.ch",
+  "bugs": {
+    "url": "https://github.com/mirello-dev/epoch-vscode/issues",
+    "email": "info@mirello.ch"
+  },
+  "icon": "images/epoch-logo.png",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "files": [
+    "dist",
+    "images",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "categories": [
+    "Visualization",
+    "Education"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onDebug"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "epoch.setApiKey",
+        "title": "epoch: Set API Key"
+      },
+      {
+        "command": "epoch.setBaseUrl",
+        "title": "epoch: Set Instance"
+      },
+      {
+        "command": "epoch.openDashboard",
+        "title": "epoch: Open Dashboard"
+      },
+      {
+        "command": "epoch.showOutput",
+        "title": "epoch: Show Output"
+      }
+    ],
+    "configuration": {
+      "title": "epoch",
+      "properties": {
+        "epoch.apiKey": {
+          "type": "string",
+          "description": "API key for epoch server authentication"
+        },
+        "epoch.baseUrl": {
+          "type": "string",
+          "default": "https://epoch.app",
+          "description": "Base URL for the epoch server instance"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node",
+    "dev": "esbuild ./src/extension.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --watch"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.2",
+    "@types/vscode": "1.100.0",
+    "esbuild": "0.27.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mirello-dev/epoch-vscode.git"
+  },
+  "license": "GPL-3.0"
+}
