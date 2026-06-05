@@ -59,6 +59,7 @@ export class StatusBarManager {
 
   public updateTime(hours: number, minutes: number): void {
     this.totalSeconds = hours * 3600 + minutes * 60;
+    this.trackingStartTime = Date.now();
     this.updateStatusBar(true);
   }
 

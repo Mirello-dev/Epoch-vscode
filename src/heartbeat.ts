@@ -34,6 +34,7 @@ export class HeartbeatManager {
   private hasValidApiKey: boolean = true;
   private lastActivity: number = Date.now();
   private todayLocalTotalSeconds: number = 0;
+  private currentDay: string = new Date().toDateString();
   private isWindowFocused: boolean = true;
   private unsyncedLocalSeconds: number = 0;
   private activeSecondsSinceLastHeartbeat: number = 0;
@@ -68,6 +69,7 @@ export class HeartbeatManager {
 
     this.activityAccumulatorIntervalId = setInterval(() => {
       const now = Date.now();
+      this.rolloverDayIfNeeded();
       if (this.isWindowFocused) {
         const timeSinceLastInteraction = now - this.lastActivity;
         if (
@@ -79,6 +81,8 @@ export class HeartbeatManager {
           if (elapsedSeconds > 0) {
             this.unsyncedLocalSeconds += elapsedSeconds;
             this.activeSecondsSinceLastHeartbeat += elapsedSeconds;
+            this.todayLocalTotalSeconds += elapsedSeconds;
+            this.refreshStatusBarTime();
           }
         }
       }
@@ -157,7 +161,7 @@ export class HeartbeatManager {
         language: editor.document.languageId,
       };
       this.recordUserInteraction();
-      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
+      this.sendHeartbeat(true);
     }
   };
 
@@ -176,7 +180,7 @@ export class HeartbeatManager {
       const timeThresholdPassed =
         now - this.lastHeartbeat >= this.heartbeatInterval;
       if (fileChanged || timeThresholdPassed) {
-        this.sendHeartbeat().then(() => this.fetchDailySummary());
+        this.sendHeartbeat();
       }
     }
   };
@@ -185,7 +189,7 @@ export class HeartbeatManager {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document === document) {
       this.recordUserInteraction();
-      this.sendHeartbeat(true).then(() => this.fetchDailySummary());
+      this.sendHeartbeat(true);
     }
   };
 
@@ -197,7 +201,6 @@ export class HeartbeatManager {
       if (this.statusBar) {
         this.statusBar.stopTracking();
       }
-      this.fetchDailySummary();
     } else if (this.isWindowFocused && !wasFocused) {
       this.lastActivity = Date.now();
       log(
@@ -208,7 +211,6 @@ export class HeartbeatManager {
       if (this.statusBar) {
         this.statusBar.startTracking();
       }
-      this.fetchDailySummary();
     }
   };
 
@@ -222,7 +224,7 @@ export class HeartbeatManager {
         this.isWindowFocused &&
         now - this.lastActivity < this.userInactivityThresholdMilliseconds;
       if (this.activeDocumentInfo && userIsEffectivelyActive) {
-        this.sendHeartbeat().then(() => this.fetchDailySummary());
+        this.sendHeartbeat();
         if (this.statusBar && this.isWindowFocused) {
           this.statusBar.startTracking();
         }
@@ -246,7 +248,6 @@ export class HeartbeatManager {
     }, this.heartbeatInterval);
     setInterval(
       () => {
-        this.fetchDailySummary();
         log(
           `Heartbeat stats - Total: ${this.heartbeatCount}, Success: ${this.successCount}, Failed: ${this.failureCount}, Offline: ${this.offlineHeartbeats.length}`,
         );
@@ -296,78 +297,28 @@ export class HeartbeatManager {
     }
   }
 
-  public async fetchDailySummary(): Promise<void> {
-    const apiKey = await getApiKey();
-    const baseUrl = await getBaseUrl();
-    if (!apiKey || !baseUrl) {
+  // API keys are scoped to sending heartbeats only; they cannot read the
+  // dashboard stats endpoint (that is JWT/session-only). The status-bar time is
+  // therefore derived purely from locally tracked active time, and the API key
+  // status is driven solely by the heartbeat endpoint's response.
+  private rolloverDayIfNeeded(): void {
+    const today = new Date().toDateString();
+    if (today !== this.currentDay) {
+      this.currentDay = today;
+      this.todayLocalTotalSeconds = 0;
+      this.unsyncedLocalSeconds = 0;
+      this.refreshStatusBarTime();
+    }
+  }
+
+  private refreshStatusBarTime(): void {
+    if (!this.statusBar) {
       return;
     }
-    try {
-      const url = new URL("/api/dashboard/stats", baseUrl);
-      url.searchParams.append("range", "today");
-      url.searchParams.append("t", Date.now().toString());
-      const requestOptions = {
-        hostname: url.hostname,
-        port: url.port || (url.protocol === "https:" ? 443 : 80),
-        path: url.pathname + url.search,
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        protocol: url.protocol,
-      };
-      const apiResponse = await this.makeRequest<{
-        summaries: Array<{
-          date: string;
-          totalSeconds: number;
-          projects: Record<string, number>;
-          languages: Record<string, number>;
-          editors: Record<string, number>;
-          os: Record<string, number>;
-          hourlyData: Array<{ seconds: number }>;
-        }>;
-        timezone: string;
-      }>(requestOptions);
-      this.setOnlineStatus(true);
-      this.setApiKeyStatus(true);
-      if (
-        apiResponse &&
-        apiResponse.summaries &&
-        apiResponse.summaries.length > 0
-      ) {
-        const todaySummary = apiResponse.summaries[0];
-        this.todayLocalTotalSeconds = todaySummary.totalSeconds;
-        if (this.statusBar) {
-          const hours = Math.floor(this.todayLocalTotalSeconds / 3600);
-          const minutes = Math.floor((this.todayLocalTotalSeconds % 3600) / 60);
-          this.statusBar.updateTime(hours, minutes);
-        }
-        this.unsyncedLocalSeconds = 0;
-      } else {
-        if (this.statusBar) {
-          this.statusBar.updateTime(0, 0);
-        }
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("401")) {
-        this.setApiKeyStatus(false);
-        log(`Error fetching daily summary: Invalid API key`);
-      } else {
-        // Online status is driven by the heartbeat endpoint, not the stats
-        // fetch, so a failing summary request must not flip us offline.
-        log(`Error fetching daily summary: ${error}`);
-      }
-      if (
-        this.statusBar &&
-        (this.todayLocalTotalSeconds > 0 || this.unsyncedLocalSeconds > 0)
-      ) {
-        const totalSeconds =
-          this.todayLocalTotalSeconds + this.unsyncedLocalSeconds;
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        this.statusBar.updateTime(hours, minutes);
-      }
-    }
+    const total = this.todayLocalTotalSeconds;
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    this.statusBar.updateTime(hours, minutes);
   }
 
   private async syncOfflineHeartbeats(): Promise<void> {
@@ -419,7 +370,7 @@ export class HeartbeatManager {
 
     if (this.offlineHeartbeats.length === 0) {
       this.unsyncedLocalSeconds = 0;
-      this.fetchDailySummary();
+      this.refreshStatusBarTime();
     }
   }
 
@@ -448,6 +399,10 @@ export class HeartbeatManager {
     }
     const durationSeconds = this.activeSecondsSinceLastHeartbeat;
     this.activeSecondsSinceLastHeartbeat = 0;
+    if (durationSeconds <= 0) {
+      log("Skipping heartbeat: no active seconds accumulated (duration_seconds = 0)");
+      return;
+    }
     const heartbeat: Heartbeat = {
       timestamp: new Date().toISOString(),
       ide: vscode.env.appName,
@@ -539,7 +494,8 @@ export class HeartbeatManager {
     try {
       if (fs.existsSync(this.offlineQueuePath)) {
         const data = fs.readFileSync(this.offlineQueuePath, "utf8");
-        this.offlineHeartbeats = JSON.parse(data);
+        const loaded: Heartbeat[] = JSON.parse(data);
+        this.offlineHeartbeats = loaded.filter((h) => h.duration_seconds > 0);
       }
     } catch (error) {
       log(
@@ -565,55 +521,6 @@ export class HeartbeatManager {
         }`,
       );
     }
-  }
-
-  private makeRequest<T>(options: http.RequestOptions): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const req = (options.protocol === "https:" ? https : http).request(
-        options,
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => {
-            data += chunk;
-          });
-          res.on("end", () => {
-            if (
-              res.statusCode &&
-              res.statusCode >= 200 &&
-              res.statusCode < 300
-            ) {
-              try {
-                resolve(JSON.parse(data));
-              } catch (error) {
-                reject(
-                  new Error(
-                    `Invalid JSON response: ${
-                      error instanceof Error ? error.message : String(error)
-                    }`,
-                  ),
-                );
-              }
-            } else if (res.statusCode === 401) {
-              this.setApiKeyStatus(false);
-              reject(
-                new Error(`Invalid API key (status code: ${res.statusCode})`),
-              );
-            } else {
-              reject(
-                new Error(
-                  `Request failed with status code ${res.statusCode}: ${data}`,
-                ),
-              );
-            }
-          });
-        },
-      );
-      req.on("error", (error) => {
-        this.setOnlineStatus(false);
-        reject(error);
-      });
-      req.end();
-    });
   }
 
   private async getProjectName(

@@ -112,7 +112,7 @@ async function migrateLegacyConfigs(): Promise<void> {
 
       vscode.window.showInformationMessage(
         "epoch configuration has been migrated to the new location. " +
-          `New location: ${CONFIG_FILE_PATH}`,
+        `New location: ${CONFIG_FILE_PATH}`,
       );
     } catch (error: any) {
       log(`Error during migration: ${error.message}`);
@@ -251,19 +251,18 @@ async function checkApiKey(
 ): Promise<ApiKeyValidationResult> {
   let url: URL;
   try {
-    url = new URL("/api/dashboard/stats", baseUrl);
+    url = new URL("/api/validate-key", baseUrl);
   } catch (error: any) {
     return {
       status: "unreachable",
       message: `Invalid instance URL: ${error.message}`,
     };
   }
-  url.searchParams.append("range", "today");
 
   const requestOptions: http.RequestOptions = {
     hostname: url.hostname,
     port: url.port || (url.protocol === "https:" ? 443 : 80),
-    path: url.pathname + url.search,
+    path: url.pathname,
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -275,19 +274,32 @@ async function checkApiKey(
     const req = (url.protocol === "https:" ? https : http).request(
       requestOptions,
       (res) => {
-        // Drain the response so the socket can be reused/closed cleanly.
-        res.resume();
         const statusCode = res.statusCode ?? 0;
-        if (statusCode >= 200 && statusCode < 300) {
-          resolve({ status: "valid" });
-        } else if (statusCode === 401 || statusCode === 403) {
-          resolve({ status: "invalid" });
-        } else {
-          resolve({
-            status: "unreachable",
-            message: `Server responded with status code ${statusCode}`,
-          });
-        }
+        let body = "";
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          // The /api/validate-key endpoint is anonymous and always responds
+          // 200; validity is carried in the response body, not the status code.
+          if (statusCode < 200 || statusCode >= 300) {
+            resolve({
+              status: "unreachable",
+              message: `Server responded with status code ${statusCode}`,
+            });
+            return;
+          }
+          try {
+            const parsed = JSON.parse(body);
+            const valid = parsed?.data?.valid === true;
+            resolve({ status: valid ? "valid" : "invalid" });
+          } catch {
+            resolve({
+              status: "unreachable",
+              message: "Could not parse server response.",
+            });
+          }
+        });
       },
     );
     req.on("error", (error) => {

@@ -20,8 +20,6 @@ export async function activate(context: vscode.ExtensionContext) {
   const heartbeatManager = new HeartbeatManager(context, statusBarManager);
   context.subscriptions.push(heartbeatManager);
 
-  heartbeatManager.fetchDailySummary();
-
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("epoch.apiKey")) {
