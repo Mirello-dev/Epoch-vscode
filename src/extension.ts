@@ -2,7 +2,12 @@ import * as vscode from "vscode";
 import { log, showOutputChannel } from "./log";
 import { HeartbeatManager } from "./heartbeat";
 import { StatusBarManager } from "./status-bar";
-import { setApiKey, setBaseUrl, initializeAndSyncConfig } from "./config";
+import {
+  setApiKey,
+  setBaseUrl,
+  validateApiKey,
+  initializeAndSyncConfig,
+} from "./config";
 
 export async function activate(context: vscode.ExtensionContext) {
   await initializeAndSyncConfig();
@@ -52,6 +57,13 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  const validateApiKeyCommand = vscode.commands.registerCommand(
+    "epoch.validateApiKey",
+    async () => {
+      await validateApiKey();
+    }
+  );
+
   const showOutputCommand = vscode.commands.registerCommand(
     "epoch.showOutput",
     () => {
@@ -63,6 +75,7 @@ export async function activate(context: vscode.ExtensionContext) {
     openDashboardCommand,
     setApiKeyCommand,
     setBaseUrlCommand,
+    validateApiKeyCommand,
     showOutputCommand
   );
 }

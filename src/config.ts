@@ -3,6 +3,10 @@ import { log } from "./log";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import * as https from "https";
+import * as http from "http";
+
+const DEFAULT_BASE_URL = "https://epoch.mirello.cloud";
 
 function getConfigDir(): string {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME;
@@ -217,7 +221,7 @@ export async function setBaseUrl(): Promise<void> {
   const currentBaseUrl = await getBaseUrl();
   const baseUrl = await vscode.window.showInputBox({
     prompt: "Enter your epoch instance URL",
-    placeHolder: "https://epoch.app",
+    placeHolder: DEFAULT_BASE_URL,
     value: currentBaseUrl,
   });
   if (!baseUrl) {
@@ -232,8 +236,116 @@ export async function getApiKey(): Promise<string | undefined> {
   return getConfigValue<string>("apiKey");
 }
 
+type ApiKeyValidationResult =
+  | { status: "valid" }
+  | { status: "invalid" }
+  | { status: "unreachable"; message: string };
+
+/**
+ * Verifies that the stored API key authenticates successfully against the
+ * configured epoch instance by calling an authenticated endpoint.
+ */
+async function checkApiKey(
+  apiKey: string,
+  baseUrl: string,
+): Promise<ApiKeyValidationResult> {
+  let url: URL;
+  try {
+    url = new URL("/api/dashboard/stats", baseUrl);
+  } catch (error: any) {
+    return {
+      status: "unreachable",
+      message: `Invalid instance URL: ${error.message}`,
+    };
+  }
+  url.searchParams.append("range", "today");
+
+  const requestOptions: http.RequestOptions = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === "https:" ? 443 : 80),
+    path: url.pathname + url.search,
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    protocol: url.protocol,
+  };
+
+  return new Promise<ApiKeyValidationResult>((resolve) => {
+    const req = (url.protocol === "https:" ? https : http).request(
+      requestOptions,
+      (res) => {
+        // Drain the response so the socket can be reused/closed cleanly.
+        res.resume();
+        const statusCode = res.statusCode ?? 0;
+        if (statusCode >= 200 && statusCode < 300) {
+          resolve({ status: "valid" });
+        } else if (statusCode === 401 || statusCode === 403) {
+          resolve({ status: "invalid" });
+        } else {
+          resolve({
+            status: "unreachable",
+            message: `Server responded with status code ${statusCode}`,
+          });
+        }
+      },
+    );
+    req.on("error", (error) => {
+      resolve({ status: "unreachable", message: error.message });
+    });
+    req.end();
+  });
+}
+
+/**
+ * Validates the configured API key against the configured epoch instance and
+ * reports the outcome to the user.
+ */
+export async function validateApiKey(): Promise<void> {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    vscode.window.showWarningMessage(
+      "No epoch API key is configured. Run 'epoch: Set API Key' first.",
+    );
+    return;
+  }
+
+  const baseUrl = await getBaseUrl();
+  log(`Validating API key against ${baseUrl}...`);
+
+  const result = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Validating epoch API key against ${baseUrl}...`,
+      cancellable: false,
+    },
+    () => checkApiKey(apiKey, baseUrl),
+  );
+
+  switch (result.status) {
+    case "valid":
+      log(`API key is valid for ${baseUrl}`);
+      vscode.window.showInformationMessage(
+        `epoch API key is valid for ${baseUrl}`,
+      );
+      break;
+    case "invalid":
+      log(`API key is invalid for ${baseUrl}`);
+      vscode.window.showErrorMessage(
+        `epoch API key is not valid for ${baseUrl}. Run 'epoch: Set API Key' to update it.`,
+      );
+      break;
+    case "unreachable":
+      log(`Could not validate API key against ${baseUrl}: ${result.message}`);
+      vscode.window.showErrorMessage(
+        `Could not reach epoch instance at ${baseUrl}: ${result.message}`,
+      );
+      break;
+  }
+}
+
 export async function getBaseUrl(): Promise<string> {
-  return (await getConfigValue<string>("baseUrl")) ?? "https://epoch.app";
+  return (await getConfigValue<string>("baseUrl")) ?? DEFAULT_BASE_URL;
 }
 
 export async function initializeAndSyncConfig(): Promise<void> {
