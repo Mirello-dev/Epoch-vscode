@@ -34,7 +34,7 @@
   },
   "icon": "images/epoch-logo.png",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.120.0"
   },
   "files": [
     "dist",
