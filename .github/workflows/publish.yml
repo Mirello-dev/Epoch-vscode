@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
@@ -32,7 +32,7 @@ jobs:
           vsce package
       
       - name: Upload VSIX
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: extension
           path: "*.vsix"
@@ -43,12 +43,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download VSIX
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: extension
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
       
@@ -63,12 +63,12 @@ jobs:
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Download VSIX
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v8
   #       with:
   #         name: extension
       
   #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
+  #       uses: actions/setup-node@v6
   #       with:
   #         node-version: '20'
       
