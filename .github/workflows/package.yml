@@ -29,7 +29,7 @@ jobs:
         vsce package
         
     - name: Upload VSIX
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: extension
         path: "*.vsix" 
